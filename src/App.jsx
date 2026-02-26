@@ -442,6 +442,7 @@ export default function App() {
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600">{fmt(r.siryo, 1)}</span> },
     { label: "┗ 無料AC", a: "right", render: r => <span className="text-emerald-600">{fmt(r.free, 1)}</span> },
+    { label: "CVR", a: "right", render: r => r.clicks ? `${r.cvr.toFixed(2)}%` : "-" },
     { label: "Tier1 CPA", a: "right", b: true, render: r => r.cpa != null ? `¥${fmt(r.cpa)}` : "-" },
   ];
 
@@ -455,6 +456,7 @@ export default function App() {
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600 text-xs">{fmt(r.siryo, 1)}</span> },
     { label: "┗ 無料AC", a: "right", render: r => <span className="text-emerald-600 text-xs">{fmt(r.free, 1)}</span> },
+    { label: "CVR", a: "right", render: r => r.clicks ? `${r.cvr.toFixed(2)}%` : "-" },
     { label: "Tier1 CPA", a: "right", b: true, render: r => r.cpa != null ? `¥${fmt(r.cpa)}` : "-" },
   ];
 
@@ -468,6 +470,7 @@ export default function App() {
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600 text-xs">{fmt(r.siryo, 1)}</span> },
     { label: "┗ 無料AC", a: "right", render: r => <span className="text-emerald-600 text-xs">{fmt(r.free, 1)}</span> },
+    { label: "CVR", a: "right", render: r => r.clicks ? `${r.cvr.toFixed(2)}%` : "-" },
     { label: "Tier1 CPA", a: "right", b: true, render: r => r.cpa != null ? `¥${fmt(r.cpa)}` : "-" },
   ];
 
