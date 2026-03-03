@@ -438,6 +438,7 @@ export default function App() {
     { label: "Click", a: "right", render: r => fmt(r.clicks) },
     { label: "CTR", a: "right", render: r => `${r.ctr.toFixed(2)}%` },
     { label: "CPC", a: "right", render: r => `¥${fmt(r.cpc)}` },
+    { label: "CPM", a: "right", render: r => `¥${fmt(r.cpm)}` },
     { label: "費用", a: "right", render: r => `¥${fmt(r.cost)}` },
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600">{fmt(r.siryo, 1)}</span> },
@@ -452,6 +453,7 @@ export default function App() {
     { label: "Click", a: "right", render: r => fmt(r.clicks) },
     { label: "CTR", a: "right", render: r => `${r.ctr.toFixed(2)}%` },
     { label: "CPC", a: "right", render: r => `¥${fmt(r.cpc)}` },
+    { label: "CPM", a: "right", render: r => `¥${fmt(r.cpm)}` },
     { label: "費用", a: "right", render: r => `¥${fmt(r.cost)}` },
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600 text-xs">{fmt(r.siryo, 1)}</span> },
@@ -466,6 +468,7 @@ export default function App() {
     { label: "Click", a: "right", render: r => fmt(r.clicks) },
     { label: "CTR", a: "right", render: r => `${r.ctr.toFixed(2)}%` },
     { label: "CPC", a: "right", render: r => `¥${fmt(r.cpc)}` },
+    { label: "CPM", a: "right", render: r => `¥${fmt(r.cpm)}` },
     { label: "費用", a: "right", render: r => `¥${fmt(r.cost)}` },
     { label: "Tier1 CV", a: "right", b: true, render: r => fmt(r.tier1, 1) },
     { label: "┗ 資料", a: "right", render: r => <span className="text-amber-600 text-xs">{fmt(r.siryo, 1)}</span> },
@@ -1090,11 +1093,11 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
 
               // --- A: 集計表のクリップボードコピー ---
               const copyTableToClipboard = () => {
-                const header = ["日付","IMP","Click","CTR","CPC","費用","Tier1 CV","資料請求","無料AC","Tier1 CPA"].join("\t");
+                const header = ["日付","IMP","Click","CTR","CPC","CPM","費用","Tier1 CV","資料請求","無料AC","CVR","Tier1 CPA"].join("\t");
                 const rows = tableData.map(r =>
-                  [r.date, r.imp, r.clicks, r.ctr.toFixed(2)+"%", r.cpc, r.cost, r.tier1.toFixed(1), r.siryo.toFixed(1), r.free.toFixed(1), r.cpa != null ? r.cpa : ""].join("\t")
+                  [r.date, r.imp, r.clicks, r.ctr.toFixed(2)+"%", r.cpc, r.cpm, r.cost, r.tier1.toFixed(1), r.siryo.toFixed(1), r.free.toFixed(1), r.cvr.toFixed(2)+"%", r.cpa != null ? r.cpa : ""].join("\t")
                 );
-                const total = ["合計", totalRow.imp, totalRow.clicks, totalRow.ctr.toFixed(2)+"%", totalRow.cpc, totalRow.cost, totalRow.tier1.toFixed(1), totalRow.siryo.toFixed(1), totalRow.free.toFixed(1), totalRow.cpa != null ? totalRow.cpa : ""].join("\t");
+                const total = ["合計", totalRow.imp, totalRow.clicks, totalRow.ctr.toFixed(2)+"%", totalRow.cpc, totalRow.cpm, totalRow.cost, totalRow.tier1.toFixed(1), totalRow.siryo.toFixed(1), totalRow.free.toFixed(1), totalRow.cvr.toFixed(2)+"%", totalRow.cpa != null ? totalRow.cpa : ""].join("\t");
                 const tsv = [header, ...rows, total].join("\n");
                 navigator.clipboard.writeText(tsv).then(() => {
                   setCopied(true);
@@ -1190,10 +1193,12 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold">Click</th>
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold">CTR</th>
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold">CPC</th>
+                          <th className="py-2 px-2 text-right text-gray-600 font-semibold">CPM</th>
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold">費用</th>
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold font-bold">Tier1 CV</th>
                           <th className="py-2 px-2 text-right text-amber-600 font-semibold">資料請求</th>
                           <th className="py-2 px-2 text-right text-emerald-600 font-semibold">無料AC</th>
+                          <th className="py-2 px-2 text-right text-gray-600 font-semibold">CVR</th>
                           <th className="py-2 px-2 text-right text-gray-600 font-semibold font-bold">Tier1 CPA</th>
                         </tr>
                       </thead>
@@ -1205,10 +1210,12 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                             <td className="py-1.5 px-2 text-right">{fmt(r.clicks)}</td>
                             <td className="py-1.5 px-2 text-right">{r.ctr.toFixed(2)}%</td>
                             <td className="py-1.5 px-2 text-right">¥{fmt(r.cpc)}</td>
+                            <td className="py-1.5 px-2 text-right">¥{fmt(r.cpm)}</td>
                             <td className="py-1.5 px-2 text-right">¥{fmt(r.cost)}</td>
                             <td className="py-1.5 px-2 text-right font-bold">{fmt(r.tier1, 1)}</td>
                             <td className="py-1.5 px-2 text-right text-amber-600">{fmt(r.siryo, 1)}</td>
                             <td className="py-1.5 px-2 text-right text-emerald-600">{fmt(r.free, 1)}</td>
+                            <td className="py-1.5 px-2 text-right">{r.clicks ? `${r.cvr.toFixed(2)}%` : "-"}</td>
                             <td className="py-1.5 px-2 text-right font-bold">{r.cpa != null ? `¥${fmt(r.cpa)}` : "-"}</td>
                           </tr>
                         ))}
@@ -1219,10 +1226,12 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                           <td className="py-2 px-2 text-right">{fmt(totalRow.clicks)}</td>
                           <td className="py-2 px-2 text-right">{totalRow.ctr.toFixed(2)}%</td>
                           <td className="py-2 px-2 text-right">¥{fmt(totalRow.cpc)}</td>
+                          <td className="py-2 px-2 text-right">¥{fmt(totalRow.cpm)}</td>
                           <td className="py-2 px-2 text-right">¥{fmt(totalRow.cost)}</td>
                           <td className="py-2 px-2 text-right">{fmt(totalRow.tier1, 1)}</td>
                           <td className="py-2 px-2 text-right text-amber-600">{fmt(totalRow.siryo, 1)}</td>
                           <td className="py-2 px-2 text-right text-emerald-600">{fmt(totalRow.free, 1)}</td>
+                          <td className="py-2 px-2 text-right">{totalRow.clicks ? `${totalRow.cvr.toFixed(2)}%` : "-"}</td>
                           <td className="py-2 px-2 text-right">{totalRow.cpa != null ? `¥${fmt(totalRow.cpa)}` : "-"}</td>
                         </tr>
                       </tbody>
