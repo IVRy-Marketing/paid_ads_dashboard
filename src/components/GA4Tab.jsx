@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import Papa from "papaparse";
 import _ from "lodash";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import CalendarPicker from "./CalendarPicker";
 
 /* ============================================================
    CONFIG
@@ -98,18 +99,23 @@ const SortIcon = ({ col, sortKey, sortDir }) => {
 };
 
 /* ── Term Bar Chart (Horizontal) ── */
-const TermBarChart = ({ data, title }) => {
+const TermBarChart = ({ data, title, compareData, compareMode }) => {
   const termData = useMemo(() => {
     const groups = _.groupBy(data, "term");
+    const cGroups = compareMode && compareData ? _.groupBy(compareData, "term") : {};
     return Object.entries(groups)
-      .map(([term, rows]) => ({
-        term: term.length > 25 ? term.slice(0, 23) + "…" : term,
-        fullTerm: term,
-        ...agg(rows),
-      }))
+      .map(([term, rows]) => {
+        const cRows = cGroups[term] || [];
+        return {
+          term: term.length > 25 ? term.slice(0, 23) + "…" : term,
+          fullTerm: term,
+          ...agg(rows),
+          ...(compareMode ? { tier1_compare: _.sumBy(cRows, "tier1"), siryo_compare: _.sumBy(cRows, "siryo"), free_compare: _.sumBy(cRows, "free") } : {}),
+        };
+      })
       .sort((a, b) => b.tier1 - a.tier1)
       .slice(0, 15);
-  }, [data]);
+  }, [data, compareData, compareMode]);
 
   if (termData.length === 0) return null;
 
@@ -122,32 +128,58 @@ const TermBarChart = ({ data, title }) => {
         <div className="text-gray-700">Tier1 CV: <span className="font-bold">{fmt(d.tier1)}</span></div>
         <div className="text-orange-600">資料請求: <span className="font-bold">{fmt(d.siryo)}</span></div>
         <div className="text-emerald-600">無料AC: <span className="font-bold">{fmt(d.free)}</span></div>
+        {compareMode && d.tier1_compare != null && (
+          <>
+            <div className="mt-1 pt-1 border-t border-gray-100 text-gray-400">比較期間</div>
+            <div className="text-gray-500">Tier1 CV: <span className="font-bold">{fmt(d.tier1_compare)}</span></div>
+            <div className="text-gray-500">資料請求: <span className="font-bold">{fmt(d.siryo_compare)}</span></div>
+            <div className="text-gray-500">無料AC: <span className="font-bold">{fmt(d.free_compare)}</span></div>
+          </>
+        )}
       </div>
     );
   };
 
+  const barHeight = compareMode ? 40 : 32;
+
   return (
     <div className="mb-5">
       <div className="text-xs font-semibold text-gray-600 mb-2">{title || "ターム別 Tier1 CV（上位15件）"}</div>
-      <ResponsiveContainer width="100%" height={Math.max(termData.length * 32 + 40, 150)}>
+      <ResponsiveContainer width="100%" height={Math.max(termData.length * barHeight + 40, 150)}>
         <BarChart data={termData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
           <XAxis type="number" tick={{ fontSize: 10 }} />
           <YAxis type="category" dataKey="term" tick={{ fontSize: 10 }} width={180} />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="tier1" name="Tier1 CV" radius={[0, 4, 4, 0]} barSize={18}>
-            {termData.map((_, i) => (
+          {compareMode && <Legend wrapperStyle={{ fontSize: 11 }} />}
+          <Bar dataKey="tier1" name={compareMode ? "現在の期間" : "Tier1 CV"} fill="#6366F1" radius={[0, 4, 4, 0]} barSize={compareMode ? 14 : 18}>
+            {!compareMode && termData.map((_, i) => (
               <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
             ))}
           </Bar>
+          {compareMode && (
+            <Bar dataKey="tier1_compare" name="比較期間" fill="#9CA3AF" radius={[0, 4, 4, 0]} barSize={14} />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 };
 
+/* ── Diff display helper ── */
+const DiffCell = ({ current, compare, color }) => {
+  const diff = current - compare;
+  const cls = diff > 0 ? "text-green-600" : diff < 0 ? "text-red-500" : "text-gray-400";
+  return (
+    <td className={`px-3 py-2 text-right text-xs ${color || ""}`}>
+      <div>{fmt(compare)}</div>
+      <div className={`${cls} text-[10px]`}>{diff > 0 ? "+" : ""}{fmt(diff)}</div>
+    </td>
+  );
+};
+
 /* ── Flat Table ── */
-const FlatTable = ({ data }) => {
+const FlatTable = ({ data, compareData, compareMode }) => {
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ channel: "", campaign: "", content: "", term: "" });
@@ -208,6 +240,13 @@ const FlatTable = ({ data }) => {
     </div>
   );
 
+  /* compare: aggregate compareData by term for matching */
+  const compareByTerm = useMemo(() => {
+    if (!compareMode || !compareData) return {};
+    const groups = _.groupBy(compareData, "term");
+    return _.mapValues(groups, (rows) => agg(rows));
+  }, [compareData, compareMode]);
+
   const cols = [
     { key: "date", label: "日付", align: "left" },
     { key: "channel", label: "媒体", align: "left" },
@@ -228,7 +267,7 @@ const FlatTable = ({ data }) => {
         <FilterSelect label="ターム" value={filters.term} options={uniqueTerms} filterKey="term" />
       </div>
 
-      <TermBarChart data={filtered} title="絞り込み結果：ターム別 Tier1 CV（上位15件）" />
+      <TermBarChart data={filtered} title="絞り込み結果：ターム別 Tier1 CV（上位15件）" compareData={compareData} compareMode={compareMode} />
 
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs text-gray-500">
@@ -272,27 +311,44 @@ const FlatTable = ({ data }) => {
                   {c.label}<SortIcon col={c.key} sortKey={sortKey} sortDir={sortDir} />
                 </th>
               ))}
+              {compareMode && (
+                <>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-400 whitespace-nowrap bg-gray-100/60">比較 Tier1</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-400 whitespace-nowrap bg-gray-100/60">比較 資料</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-400 whitespace-nowrap bg-gray-100/60">比較 無料AC</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r, i) => (
-              <tr key={i} className="border-t border-gray-100 hover:bg-indigo-50/30">
-                <td className="px-3 py-2 whitespace-nowrap text-gray-500">{r.date}</td>
-                <td className="px-3 py-2 whitespace-nowrap">
-                  <span className="inline-block w-2 h-2 rounded-full mr-1.5"
-                    style={{ backgroundColor: CHANNEL_COLORS[r.channel] || "#9CA3AF" }} />
-                  {r.channel}
-                </td>
-                <td className="px-3 py-2 max-w-[180px] truncate" title={r.campaign}>{r.campaign}</td>
-                <td className="px-3 py-2 max-w-[180px] truncate" title={r.content}>{r.content}</td>
-                <td className="px-3 py-2 max-w-[160px] truncate" title={r.term}>{r.term}</td>
-                <td className="px-3 py-2 text-right font-medium">{fmt(r.tier1)}</td>
-                <td className="px-3 py-2 text-right text-orange-600">{fmt(r.siryo)}</td>
-                <td className="px-3 py-2 text-right text-emerald-600">{fmt(r.free)}</td>
-              </tr>
-            ))}
+            {sorted.map((r, i) => {
+              const cmp = compareMode ? (compareByTerm[r.term] || { tier1: 0, siryo: 0, free: 0 }) : null;
+              return (
+                <tr key={i} className="border-t border-gray-100 hover:bg-indigo-50/30">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">{r.date}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5"
+                      style={{ backgroundColor: CHANNEL_COLORS[r.channel] || "#9CA3AF" }} />
+                    {r.channel}
+                  </td>
+                  <td className="px-3 py-2 max-w-[180px] truncate" title={r.campaign}>{r.campaign}</td>
+                  <td className="px-3 py-2 max-w-[180px] truncate" title={r.content}>{r.content}</td>
+                  <td className="px-3 py-2 max-w-[160px] truncate" title={r.term}>{r.term}</td>
+                  <td className="px-3 py-2 text-right font-medium">{fmt(r.tier1)}</td>
+                  <td className="px-3 py-2 text-right text-orange-600">{fmt(r.siryo)}</td>
+                  <td className="px-3 py-2 text-right text-emerald-600">{fmt(r.free)}</td>
+                  {compareMode && cmp && (
+                    <>
+                      <DiffCell current={r.tier1} compare={cmp.tier1} />
+                      <DiffCell current={r.siryo} compare={cmp.siryo} color="text-orange-400" />
+                      <DiffCell current={r.free} compare={cmp.free} color="text-emerald-400" />
+                    </>
+                  )}
+                </tr>
+              );
+            })}
             {sorted.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">該当データなし</td></tr>
+              <tr><td colSpan={compareMode ? 11 : 8} className="px-3 py-8 text-center text-gray-400">該当データなし</td></tr>
             )}
           </tbody>
         </table>
@@ -302,7 +358,7 @@ const FlatTable = ({ data }) => {
 };
 
 /* ── Drilldown Table ── */
-const DrilldownTable = ({ data }) => {
+const DrilldownTable = ({ data, compareData, compareMode }) => {
   const [level, setLevel] = useState(0);
   const [path, setPath] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -317,14 +373,32 @@ const DrilldownTable = ({ data }) => {
     return rows;
   }, [data, level, path]);
 
+  const cFiltered = useMemo(() => {
+    if (!compareMode || !compareData) return [];
+    let rows = compareData;
+    for (let i = 0; i < level; i++) {
+      rows = rows.filter((r) => r[levelKeys[i]] === path[i]);
+    }
+    return rows;
+  }, [compareData, compareMode, level, path]);
+
   const grouped = useMemo(() => {
     if (level > 3) return [];
     const key = levelKeys[Math.min(level, 3)];
     const groups = _.groupBy(filtered, key);
+    const cGroups = compareMode ? _.groupBy(cFiltered, key) : {};
     return Object.entries(groups)
-      .map(([name, rows]) => ({ name, ...agg(rows), count: rows.length }))
+      .map(([name, rows]) => {
+        const cRows = cGroups[name] || [];
+        return {
+          name,
+          ...agg(rows),
+          count: rows.length,
+          ...(compareMode ? { c_tier1: _.sumBy(cRows, "tier1"), c_siryo: _.sumBy(cRows, "siryo"), c_free: _.sumBy(cRows, "free") } : {}),
+        };
+      })
       .sort((a, b) => b.tier1 - a.tier1);
-  }, [filtered, level]);
+  }, [filtered, cFiltered, compareMode, level]);
 
   const totals = useMemo(() => agg(filtered), [filtered]);
 
@@ -359,7 +433,7 @@ const DrilldownTable = ({ data }) => {
         ))}
       </div>
 
-      {level < 3 && <TermBarChart data={filtered} title={chartTitle} />}
+      {level < 3 && <TermBarChart data={filtered} title={chartTitle} compareData={cFiltered} compareMode={compareMode} />}
 
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs text-gray-500">
@@ -418,6 +492,13 @@ const DrilldownTable = ({ data }) => {
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Tier1 CV</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">資料請求</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">無料AC</th>
+                {compareMode && (
+                  <>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 Tier1</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 資料</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 無料AC</th>
+                  </>
+                )}
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">構成比</th>
               </tr>
             </thead>
@@ -438,6 +519,13 @@ const DrilldownTable = ({ data }) => {
                     <td className="px-3 py-2 text-right font-medium">{fmt(r.tier1)}</td>
                     <td className="px-3 py-2 text-right text-orange-600">{fmt(r.siryo)}</td>
                     <td className="px-3 py-2 text-right text-emerald-600">{fmt(r.free)}</td>
+                    {compareMode && (
+                      <>
+                        <DiffCell current={r.tier1} compare={r.c_tier1 || 0} />
+                        <DiffCell current={r.siryo} compare={r.c_siryo || 0} color="text-orange-400" />
+                        <DiffCell current={r.free} compare={r.c_free || 0} color="text-emerald-400" />
+                      </>
+                    )}
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -467,25 +555,43 @@ const DrilldownTable = ({ data }) => {
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Tier1 CV</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">資料請求</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">無料AC</th>
+                {compareMode && (
+                  <>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 Tier1</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 資料</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-400 bg-gray-100/60">比較 無料AC</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {detailRows.map((r, i) => (
-                <tr key={i} className="border-t border-gray-100 hover:bg-indigo-50/30">
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">{r.date}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className="inline-block w-2 h-2 rounded-full mr-1.5"
-                      style={{ backgroundColor: CHANNEL_COLORS[r.channel] || "#9CA3AF" }} />
-                    {r.channel}
-                  </td>
-                  <td className="px-3 py-2 max-w-[160px] truncate" title={r.campaign}>{r.campaign}</td>
-                  <td className="px-3 py-2 max-w-[160px] truncate" title={r.content}>{r.content}</td>
-                  <td className="px-3 py-2 max-w-[140px] truncate" title={r.term}>{r.term}</td>
-                  <td className="px-3 py-2 text-right font-medium">{fmt(r.tier1)}</td>
-                  <td className="px-3 py-2 text-right text-orange-600">{fmt(r.siryo)}</td>
-                  <td className="px-3 py-2 text-right text-emerald-600">{fmt(r.free)}</td>
-                </tr>
-              ))}
+              {detailRows.map((r, i) => {
+                const cmpTerm = compareMode ? (_.groupBy(cFiltered, "term")[r.term] || []) : [];
+                const cmpAgg = compareMode ? agg(cmpTerm) : null;
+                return (
+                  <tr key={i} className="border-t border-gray-100 hover:bg-indigo-50/30">
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-500">{r.date}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="inline-block w-2 h-2 rounded-full mr-1.5"
+                        style={{ backgroundColor: CHANNEL_COLORS[r.channel] || "#9CA3AF" }} />
+                      {r.channel}
+                    </td>
+                    <td className="px-3 py-2 max-w-[160px] truncate" title={r.campaign}>{r.campaign}</td>
+                    <td className="px-3 py-2 max-w-[160px] truncate" title={r.content}>{r.content}</td>
+                    <td className="px-3 py-2 max-w-[140px] truncate" title={r.term}>{r.term}</td>
+                    <td className="px-3 py-2 text-right font-medium">{fmt(r.tier1)}</td>
+                    <td className="px-3 py-2 text-right text-orange-600">{fmt(r.siryo)}</td>
+                    <td className="px-3 py-2 text-right text-emerald-600">{fmt(r.free)}</td>
+                    {compareMode && cmpAgg && (
+                      <>
+                        <DiffCell current={r.tier1} compare={cmpAgg.tier1} />
+                        <DiffCell current={r.siryo} compare={cmpAgg.siryo} color="text-orange-400" />
+                        <DiffCell current={r.free} compare={cmpAgg.free} color="text-emerald-400" />
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -504,6 +610,14 @@ const DrilldownTable = ({ data }) => {
 ============================================================ */
 export default function GA4Tab({ startDate, endDate, rawData, setRawData }) {
   const [viewMode, setViewMode] = useState("flat");
+  /* compare mode state */
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareFrom, setCompareFrom] = useState("");
+  const [compareTo, setCompareTo] = useState("");
+  const [compareCalOpen, setCompareCalOpen] = useState(false);
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [calPickFrom, setCalPickFrom] = useState("");
+  const [calPickTo, setCalPickTo] = useState("");
 
   const handleFile = useCallback((e) => {
     const file = e.target.files[0];
@@ -521,6 +635,35 @@ export default function GA4Tab({ startDate, endDate, rawData, setRawData }) {
     if (!startDate && !endDate) return rawData;
     return rawData.filter((r) => (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate));
   }, [rawData, startDate, endDate]);
+
+  /* compare data filtered by compare period */
+  const compareData = useMemo(() => {
+    if (!compareMode || !rawData || !compareFrom) return [];
+    return rawData.filter((r) => r.date >= compareFrom && (!compareTo || r.date <= compareTo));
+  }, [rawData, compareMode, compareFrom, compareTo]);
+
+  /* all dates available in rawData for calendar */
+  const allDates = useMemo(() => {
+    if (!rawData) return [];
+    return _.uniq(rawData.map((r) => r.date)).sort();
+  }, [rawData]);
+
+  const handleCalPick = useCallback((dateStr) => {
+    if (!calPickFrom || calPickTo) {
+      setCalPickFrom(dateStr);
+      setCalPickTo("");
+    } else if (dateStr < calPickFrom) {
+      setCalPickFrom(dateStr);
+    } else {
+      setCalPickTo(dateStr);
+    }
+  }, [calPickFrom, calPickTo]);
+
+  const handleCalApply = useCallback(() => {
+    setCompareFrom(calPickFrom);
+    setCompareTo(calPickTo);
+    setCompareCalOpen(false);
+  }, [calPickFrom, calPickTo]);
 
   if (!rawData) {
     return (
@@ -550,13 +693,56 @@ export default function GA4Tab({ startDate, endDate, rawData, setRawData }) {
             <Pill active={viewMode === "drilldown"} onClick={() => setViewMode("drilldown")} color="#6366F1">
               🔍 ドリルダウン
             </Pill>
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            <button
+              onClick={() => setCompareMode((v) => !v)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${compareMode ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              {compareMode ? "📊 比較 ON" : "📊 比較"}
+            </button>
           </div>
           <label className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs cursor-pointer hover:bg-gray-200 transition-colors">
             <span>📁 CSV変更</span>
             <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
           </label>
         </div>
-        {viewMode === "flat" ? <FlatTable data={filteredData} /> : <DrilldownTable data={filteredData} />}
+
+        {/* Compare period selector */}
+        {compareMode && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-xs">
+            <span className="font-medium text-amber-700">比較期間:</span>
+            {compareFrom ? (
+              <span className="text-gray-700">{compareFrom}{compareTo ? ` 〜 ${compareTo}` : ""}</span>
+            ) : (
+              <span className="text-gray-400">未選択</span>
+            )}
+            <div className="relative">
+              <button
+                onClick={() => { setCompareCalOpen((v) => !v); if (!compareCalOpen) { setCalPickFrom(compareFrom); setCalPickTo(compareTo); } }}
+                className="px-3 py-1 bg-white border border-amber-300 rounded-md text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                📅 期間を選択
+              </button>
+              {compareCalOpen && (
+                <CalendarPicker
+                  calMonth={calMonth}
+                  setCalMonth={setCalMonth}
+                  pickFrom={calPickFrom}
+                  pickTo={calPickTo}
+                  onPick={handleCalPick}
+                  onApply={handleCalApply}
+                  onClose={() => setCompareCalOpen(false)}
+                  allDates={allDates}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {viewMode === "flat"
+          ? <FlatTable data={filteredData} compareData={compareData} compareMode={compareMode && compareFrom !== ""} />
+          : <DrilldownTable data={filteredData} compareData={compareData} compareMode={compareMode && compareFrom !== ""} />
+        }
       </div>
     </div>
   );
