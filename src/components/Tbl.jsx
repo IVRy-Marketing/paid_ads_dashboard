@@ -1,4 +1,4 @@
-export default function Tbl({ columns, data: d, onRowClick }) {
+export default function Tbl({ columns, data: d, onRowClick, totalRow }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -25,6 +25,15 @@ export default function Tbl({ columns, data: d, onRowClick }) {
               ))}
             </tr>
           ))}
+          {totalRow && (
+            <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+              {columns.map((c, ci) => (
+                <td key={ci} className={`py-2 px-2 ${c.a === "right" ? "text-right" : ""}`}>
+                  {c.totalRender ? c.totalRender(totalRow) : c.render(totalRow)}
+                </td>
+              ))}
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

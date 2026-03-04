@@ -434,8 +434,17 @@ export default function App() {
     }).sort((a, b) => b.cost - a.cost);
   })() : [];
 
+  const mediaTotal = bySource.length ? rates({
+    cost: _.sumBy(bySource, "cost"),
+    imp: _.sumBy(bySource, "imp"),
+    clicks: _.sumBy(bySource, "clicks"),
+    tier1: _.sumBy(bySource, "tier1"),
+    siryo: _.sumBy(bySource, "siryo"),
+    free: _.sumBy(bySource, "free"),
+  }) : null;
+
   const mediaCols = [
-    { label: "媒体", render: r => <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: getColor(r.source) }}></span>{r.source}</span> },
+    { label: "媒体", render: r => <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: getColor(r.source) }}></span>{r.source}</span>, totalRender: () => "総計" },
     { label: "IMP", a: "right", render: r => fmt(r.imp) },
     { label: "Click", a: "right", render: r => fmt(r.clicks) },
     { label: "CTR", a: "right", render: r => `${r.ctr.toFixed(2)}%` },
@@ -711,7 +720,7 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                 )}
                 <Card>
                   <h3 className="font-bold text-gray-800 mb-3">🏢 媒体別</h3>
-                  <Tbl columns={mediaCols} data={bySource} onRowClick={r => { setTab("drill"); setDrillSrc(r.source); setDrillCamp(null); }} />
+                  <Tbl columns={mediaCols} data={bySource} onRowClick={r => { setTab("drill"); setDrillSrc(r.source); setDrillCamp(null); }} totalRow={mediaTotal} />
                 </Card>
                 {forecast && (
                   <Card>
@@ -1250,7 +1259,7 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                   {drillSrc && <><span className="text-gray-300">›</span><button onClick={() => setDrillCamp(null)} className={`px-3 py-1 rounded-lg ${!drillCamp ? "bg-indigo-600 text-white" : "bg-white border text-gray-600 hover:bg-gray-50"}`}>{drillSrc}</button></>}
                   {drillCamp && <><span className="text-gray-300">›</span><span className="px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs max-w-xs truncate">{drillCamp.campaign_name}</span></>}
                 </div>
-                {!drillSrc && <Card><h3 className="font-bold text-gray-800 mb-3">媒体を選択</h3><Tbl columns={mediaCols} data={bySource} onRowClick={r=>{setDrillSrc(r.source);setDrillCamp(null);}}/></Card>}
+                {!drillSrc && <Card><h3 className="font-bold text-gray-800 mb-3">媒体を選択</h3><Tbl columns={mediaCols} data={bySource} onRowClick={r=>{setDrillSrc(r.source);setDrillCamp(null);}} totalRow={mediaTotal}/></Card>}
                 {drillSrc && !drillCamp && <Card><h3 className="font-bold text-gray-800 mb-3">📂 {drillSrc} キャンペーン</h3><Tbl columns={campCols} data={drillCampaigns} onRowClick={r=>setDrillCamp(r)}/></Card>}
                 {drillCamp && <Card><h3 className="font-bold text-gray-800 mb-3">📂 広告グループ</h3><p className="text-xs text-gray-500 mb-3">{drillCamp.campaign_name}</p><Tbl columns={adgCols} data={drillAdgroups}/></Card>}
               </div>
