@@ -19,6 +19,7 @@ import {
 
 // Components
 import { Card, KPI, Tbl, CVBreakdown, CalendarPicker } from './components/index.js';
+import GA4Tab from './components/GA4Tab.jsx';
 
 // --- Trend color helper ---
 const getTrendColor = (name, i, trendLevel) => {
@@ -56,6 +57,7 @@ export default function App() {
   const [aiInsight, setAiInsight] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiChannel, setAiChannel] = useState(""); // AI分析対象の媒体
+  const [ga4Data, setGa4Data] = useState(null); // GA4 CSV rawData（タブ切替で保持）
   const fileRef = useRef();
 
   const load = useCallback((raw) => {
@@ -649,7 +651,7 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
         ) : (
           <>
             <div className="flex gap-1 mb-5 bg-white rounded-xl p-1 shadow-sm border border-gray-100 w-fit">
-              {[["summary", "サマリー"], ["trend", "トレンド"], ["table", "📋 デイリー表"], ["drill", "ドリルダウン"], ["ai", "🤖 AI診断"]].map(([k, l]) => (
+              {[["summary", "サマリー"], ["trend", "トレンド"], ["table", "📋 デイリー表"], ["drill", "ドリルダウン"], ["ga4", "UTM Term分析"], ["ai", "🤖 AI診断"]].map(([k, l]) => (
                 <button key={k} onClick={() => { setTab(k); if (k !== "drill") { setDrillSrc(null); setDrillCamp(null); } }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition ${tab === k ? "bg-indigo-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}>{l}</button>
               ))}
@@ -1443,6 +1445,10 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                 </div>
               );
             })()}
+
+            {tab === "ga4" && (
+              <GA4Tab startDate={firstDate} endDate={lastDate} rawData={ga4Data} setRawData={setGa4Data} />
+            )}
 
             {tab === "ai" && (
               <div className="space-y-5">
