@@ -125,7 +125,8 @@ export default function App() {
 
         const [src, med] = (cols[1]?.trim() || "").split(" / ").map(s => s.trim());
         const campaign = cols[2]?.trim() || "";
-        const content = cols[3]?.trim() || "";
+        // GA4の "(not set)" は空文字列に正規化（P-MAXなどのutm_content未設定ケース）
+        const content = (cols[3]?.trim() || "").replace(/^\(not set\)$/, "");
         const key = `${src || ""}|${med || ""}|${campaign}|${content}`;
 
         if (!ga4Map[key]) ga4Map[key] = {};
@@ -139,8 +140,13 @@ export default function App() {
       const newData = data.map(row => {
         if (row.paid_date !== targetDate) return row;
 
-        const key = `${row.utm_source || ""}|${row.utm_medium || ""}|${row.utm_campaign || ""}|${row.utm_content || ""}`;
-        const ga4Row = ga4Map[key];
+        // utm_campaign で試行（Facebook/Yahoo/MSN）→ 失敗時は campaign_name で試行（Google自動タグ）
+        const src = row.utm_source || "";
+        const med = row.utm_medium || "";
+        const cont = row.utm_content || "";
+        const key1 = `${src}|${med}|${row.utm_campaign || ""}|${cont}`;
+        const key2 = `${src}|${med}|${row.campaign_name || ""}|${cont}`;
+        const ga4Row = ga4Map[key1] || ga4Map[key2];
         if (!ga4Row) return row;
 
         matched++;
