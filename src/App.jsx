@@ -60,7 +60,9 @@ export default function App() {
   const [aiChannel, setAiChannel] = useState(""); // AI分析対象の媒体
   const [ga4Data, setGa4Data] = useState(null); // GA4 CSV rawData（タブ切替で保持）
   const [revenueData, setRevenueData] = useState([]); // 期待収益CSV（タブ切替で保持）
+  const [ga4OverrideDate, setGa4OverrideDate] = useState(null); // GA4上書き適用日
   const fileRef = useRef();
+  const ga4OverrideRef = useRef();
 
   const load = useCallback((raw) => {
     const rows = raw.map(parseRow).filter(r => r[COL.date]);
@@ -73,13 +75,94 @@ export default function App() {
       if (COL.clicks !== "content_clicks") r.content_clicks = r[COL.clicks];
     });
     setData(rows);
-    setDrillSrc(null); setDrillCamp(null); setAiInsight("");
+    setDrillSrc(null); setDrillCamp(null); setAiInsight(""); setGa4OverrideDate(null);
   }, []);
 
   const handleFile = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     Papa.parse(f, { header: true, dynamicTyping: false, skipEmptyLines: true, encoding: "UTF-8", delimitersToGuess: [",", "\t", "|", ";"], complete: (res) => load(res.data) });
+  };
+
+  // GA4探索レポートCSVで前日CVを上書き
+  const GA4_EVENT_MAP = {
+    cost_sim_complete: "cost_sim_complete_uu",
+    account_reg_num: "account_reg_num_uu",
+    account_reg_ivr_num: "account_reg_ivr_num_uu",
+    account_reg_ivr: "account_reg_ivr_uu",
+    generate_lead_ai: "generate_lead_ai_uu",
+    generate_lead_push: "generate_lead_push_uu",
+    account_reg_none: "account_reg_none_uu",
+    generate_lead_0abj: "generate_lead_0abj_uu",
+  };
+
+  const handleGA4Override = (e) => {
+    const f = e.target.files[0];
+    if (!f || !data) return;
+    e.target.value = "";
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const lines = ev.target.result.split("\n");
+
+      // 4行目: "# 20260320-20260320" から日付取得
+      const dateMatch = lines[3]?.match(/(\d{8})/);
+      if (!dateMatch) { alert("GA4 CSVの日付行が読み取れませんでした"); return; }
+      const raw = dateMatch[1];
+      const targetDate = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+
+      // 8行目: ",,,,イベント名,evt1,evt2,...,合計" からイベント名取得
+      const eventCols = (lines[7] || "").split(",");
+      const eventNames = eventCols.slice(5).map(s => s.trim()).filter(s => s && s !== "合計" && s !== "総計");
+
+      // 11行目以降: キーワード粒度データをutm_content粒度に集約
+      const ga4Map = {};
+      for (let i = 10; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split(",");
+        if (!/^\d{8}$/.test(cols[0]?.trim())) continue; // 日付セルでない行はスキップ
+
+        const [src, med] = (cols[1]?.trim() || "").split(" / ").map(s => s.trim());
+        const campaign = cols[2]?.trim() || "";
+        const content = cols[3]?.trim() || "";
+        const key = `${src || ""}|${med || ""}|${campaign}|${content}`;
+
+        if (!ga4Map[key]) ga4Map[key] = {};
+        eventNames.forEach((evt, idx) => {
+          ga4Map[key][evt] = (ga4Map[key][evt] || 0) + (parseFloat(cols[5 + idx]) || 0);
+        });
+      }
+
+      // 対象日のデータにGA4値を適用
+      let matched = 0;
+      const newData = data.map(row => {
+        if (row.paid_date !== targetDate) return row;
+
+        const key = `${row.utm_source || ""}|${row.utm_medium || ""}|${row.utm_campaign || ""}|${row.utm_content || ""}`;
+        const ga4Row = ga4Map[key];
+        if (!ga4Row) return row;
+
+        matched++;
+        const updated = { ...row };
+        eventNames.forEach(evt => {
+          const col = GA4_EVENT_MAP[evt];
+          if (col) updated[col] = ga4Row[evt] || 0;
+        });
+
+        // 集計列の再計算
+        const s = SIRYO_KEYS.reduce((a, k) => a + (updated[k.key] || 0), 0);
+        const fv = FREE_KEYS.reduce((a, k) => a + (updated[k.key] || 0), 0);
+        updated.total_siryo_cnt = s;
+        updated.total_free_acount_cnt = fv;
+        updated.total_tier1cv_cnt = s + fv;
+        return updated;
+      });
+
+      setData(newData);
+      setGa4OverrideDate(targetDate);
+    };
+    reader.readAsText(f, "UTF-8");
   };
 
   const allDates = data ? _.uniq(data.map(r => r.paid_date)).sort() : [];
@@ -642,6 +725,19 @@ ${chAlerts.length>0?`## ⚠ 検知されたアラート\n${chAlerts.map(a=>`- ${
                     allDates={allDates}
                   />}
                 </div>
+              </>
+            )}
+            {data && (
+              <>
+                <button
+                  onClick={() => ga4OverrideRef.current?.click()}
+                  className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
+                  title="GA4探索レポートCSVで前日CVを上書き"
+                >GA4上書き</button>
+                {ga4OverrideDate && (
+                  <span className="text-xs text-emerald-600 font-medium whitespace-nowrap">{ga4OverrideDate} 適用済</span>
+                )}
+                <input ref={ga4OverrideRef} type="file" accept=".csv" onChange={handleGA4Override} className="hidden" />
               </>
             )}
             <button onClick={() => fileRef.current?.click()} className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition">CSV</button>
