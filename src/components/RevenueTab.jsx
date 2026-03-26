@@ -236,7 +236,7 @@ export default function RevenueTab({ rows, setRows, periodMode, customFrom, cust
     const map = {};
     filteredRows.forEach((r) => {
       const k = drillLevel === 0 ? r._media : cleanVal(r[currentDimKey]);
-      map[k] = (map[k] || 0) + (parseFloat(r.total_estimated_arpu) || 0);
+      map[k] = (map[k] || 0) + (parseFloat(r.total_expected_revenue) || 0);
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     return { top: sorted.slice(0, topN).map(([k]) => k), hasOthers: sorted.length > topN };
@@ -251,7 +251,7 @@ export default function RevenueTab({ rows, setRows, periodMode, customFrom, cust
       const period = groupKey(date, granularity);
       const rawKey = drillLevel === 0 ? r._media : cleanVal(r[currentDimKey]);
       const dim = topDimKeys.top.includes(rawKey) ? rawKey : topDimKeys.hasOthers ? "その他" : rawKey;
-      const arpu = parseFloat(r.total_estimated_arpu) || 0;
+      const arpu = parseFloat(r.total_expected_revenue) || 0;
       if (!periodMap[period]) periodMap[period] = { _rawPeriod: period };
       periodMap[period][dim] = (periodMap[period][dim] || 0) + arpu;
     });
@@ -273,7 +273,7 @@ export default function RevenueTab({ rows, setRows, periodMode, customFrom, cust
 
   // ---------- KPI ----------
   const kpi = useMemo(() => ({
-    arpu: filteredRows.reduce((s, r) => s + (parseFloat(r.total_estimated_arpu) || 0), 0),
+    arpu: filteredRows.reduce((s, r) => s + (parseFloat(r.total_expected_revenue) || 0), 0),
     lead: filteredRows.reduce((s, r) => s + (parseInt(r.lead_count)  || 0), 0),
     mql:  filteredRows.reduce((s, r) => s + (parseInt(r.mql_count)   || 0), 0),
     sal:  filteredRows.reduce((s, r) => s + (parseInt(r.sal_count)    || 0), 0),
@@ -286,7 +286,7 @@ export default function RevenueTab({ rows, setRows, periodMode, customFrom, cust
     filteredRows.forEach((r) => {
       const k = drillLevel === 0 ? r._media : cleanVal(r[currentDimKey]);
       if (!map[k]) map[k] = { name: k, arpu: 0, lead: 0, mql: 0, sal: 0 };
-      map[k].arpu += parseFloat(r.total_estimated_arpu) || 0;
+      map[k].arpu += parseFloat(r.total_expected_revenue) || 0;
       map[k].lead += parseInt(r.lead_count) || 0;
       map[k].mql  += parseInt(r.mql_count)  || 0;
       map[k].sal  += parseInt(r.sal_count)   || 0;
